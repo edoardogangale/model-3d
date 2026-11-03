@@ -65,7 +65,7 @@ Verificato con Python 3.13 e Node 22. Versioni: `requirements.txt` e `web/packag
 ./start.sh            # crea .venv, installa, compila l'interfaccia, avvia su http://127.0.0.1:8000
 cp .env.example .env  # poi imposta MESHY_API_KEY e/o MODEL3D_LOCAL_CMD (mai committare .env)
 ```
-Test: `. .venv/bin/activate && python -m pytest -q tests` (7 test). Test browser: `python tests/make_board.py && NODE_PATH=<percorso playwright> node tests/e2e_browser.cjs` con il server già avviato.
+Test: `. .venv/bin/activate && python -m pytest -q tests` (10 test). Test browser: `python tests/make_board.py && NODE_PATH=<percorso playwright> node tests/e2e_browser.cjs` con il server già avviato.
 
 ### Uso da iPad
 1. Sul PC/server: in `.env` imposta `MODEL3D_TOKEN=<passphrase lunga>`, poi `./start.sh --lan` (rifiuta di partire senza token).
@@ -76,8 +76,26 @@ Test: `. .venv/bin/activate && python -m pytest -q tests` (7 test). Test browser
 * App + rig + validazione: **CPU qualsiasi**, pochi GB di RAM (manichino da 30k triangoli: circa 1 s di rig). Nessuna GPU.
 * Ricostruzione: **Meshy** = nessuna GPU ma crediti e Internet; **TRELLIS.2** = GPU NVIDIA ≥ 24 GB, Linux, CUDA 12.4 (dichiarato dai suoi autori).
 
+## 3bis. TRELLIS.2 su un PC con GPU (motore locale)
+
+Il motore locale lancia il worker **sulla stessa macchina dove gira l'app**, perché le viste vengono passate come percorso di file.
+Quindi **l'app va avviata sul PC con GPU**, non nel Codespace (che non ha GPU). Dal tuo iPad apri l'app con `./start.sh --lan` e il token.
+
+Requisiti: Linux, GPU NVIDIA da 24 GB, driver NVIDIA, CUDA 12.4 (o compatibile), Miniconda/Miniforge, Git, circa 30-60 minuti per la compilazione e alcuni GB di pesi.
+
+```bash
+git clone https://github.com/edoardogangale/model-3d && cd model-3d
+bash server/tools/trellis2_setup.sh          # clona TRELLIS.2 in ~/TRELLIS.2 e installa tutto (script ufficiale setup.sh)
+cp .env.example .env                         # poi sostituisci /home/USER con il tuo percorso e imposta MODEL3D_TOKEN
+./start.sh --lan
+```
+
+Test manuale del worker prima dell'app: `conda activate trellis2 && python ~/TRELLIS.2/model3d_worker.py --image ~/TRELLIS.2/assets/example_image/T.png --out /tmp/t.glb`.
+
+Stato: lo script di installazione e il worker sono scritti sulla documentazione ufficiale di TRELLIS.2, ma **non sono stati eseguiti**: l'ambiente di sviluppo non aveva GPU né accesso ai pesi su Hugging Face. Il cablaggio del motore locale è coperto da test con un finto worker.
+
 ## 4. Verifiche eseguite (in questo ambiente, 03/11/2026)
-* `pytest`: 7/7. Stima dei giunti sul manichino (errore max < 7 cm su proporzioni volutamente diverse da quelle statistiche), pesi normalizzati ≤ 4, posa A a 40° ± 1°, flusso API completo, blocco del download "pronto" per il manichino, rilettura dei byte del GLB (nessuna URI esterna, skin presente), **rifiuto di un GLB statico, di un file corrotto e di pesi azzerati**, autenticazione a token.
+* `pytest`: 10/10 (inclusi 3 test del motore locale con finto worker). Stima dei giunti sul manichino (errore max < 7 cm su proporzioni volutamente diverse da quelle statistiche), pesi normalizzati ≤ 4, posa A a 40° ± 1°, flusso API completo, blocco del download "pronto" per il manichino, rilettura dei byte del GLB (nessuna URI esterna, skin presente), **rifiuto di un GLB statico, di un file corrotto e di pesi azzerati**, autenticazione a token.
 * Browser reale (Chromium headless con Playwright, touch): carica tavola → ritaglio con maniglie → vista "Fronte" → rimozione sfondo → motore manichino → pulizia/rig → anteprima → 4 pose di prova → validazione. **GLTFLoader apre il file**: 23 ossa, IBM coerenti (2.8e-8), pesi ok, deformazione reale, 360° ok. Screenshot ispezionati.
 * **gltf-validator Khronos: 0 errori, 0 avvisi** sul GLB esportato (1,19 MB, 30.000 triangoli, 1 materiale, texture 512×1024).
 * Il validatore ha intercettato bug veri durante lo sviluppo (nodo mesh non radice; lati quasi nulli che falsavano la misura di stiramento).

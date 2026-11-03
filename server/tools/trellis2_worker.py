@@ -10,9 +10,10 @@ Poi imposta, sul server dell'app:
     MODEL3D_LOCAL_CMD="ssh gpu-pc 'cd ~/TRELLIS.2 && python trellis2_worker.py --image {image} --out {out}'"
 (se il PC GPU è un'altra macchina, copia prima l'immagine, p.es. con scp, oppure monta una cartella condivisa).
 """
-import argparse, os
+import argparse, os, sys
 os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+sys.path.insert(0, os.environ.get("TRELLIS2_DIR", os.path.expanduser("~/TRELLIS.2")))
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--image", required=True)
@@ -22,18 +23,26 @@ ap.add_argument("--texture", type=int, default=2048)
 a = ap.parse_args()
 
 from PIL import Image
-import torch  # noqa: F401
-from trellis2.pipelines import Trellis2ImageTo3DPipeline
-import o_voxel
+import torch
+if not torch.cuda.is_available():
+    sys.exit("ERRORE: CUDA non disponibile. Controlla driver NVIDIA e l'ambiente conda 'trellis2'.")
+try:
+    from trellis2.pipelines import Trellis2ImageTo3DPipeline
+    import o_voxel
+except ImportError as e:
+    sys.exit(f"ERRORE: TRELLIS.2 non importabile ({e}). Esegui server/tools/trellis2_setup.sh e controlla TRELLIS2_DIR.")
 
+print("Carico TRELLIS.2-4B (primo avvio: download pesi)...", flush=True)
 pipeline = Trellis2ImageTo3DPipeline.from_pretrained("microsoft/TRELLIS.2-4B")
 pipeline.cuda()
-image = Image.open(a.image)
+image = Image.open(a.image).convert("RGBA")   # le viste dell'app hanno sfondo trasparente
+print("Genero la geometria...", flush=True)
 mesh = pipeline.run(image)[0]
 mesh.simplify(16777216)  # limite nvdiffrast, come nell'esempio ufficiale
 glb = o_voxel.postprocess.to_glb(
     vertices=mesh.vertices, faces=mesh.faces, attr_volume=mesh.attrs, coords=mesh.coords, attr_layout=mesh.layout,
     voxel_size=mesh.voxel_size, aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
     decimation_target=a.decimation, texture_size=a.texture, remesh=True, remesh_band=1, remesh_project=0, verbose=True)
+os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
 glb.export(a.out)   # niente WebP: l'app e il gioco leggono PNG/JPEG
-print("scritto", a.out)
+print("scritto", a.out, flush=True)
