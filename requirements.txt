@@ -1,0 +1,12 @@
+# Versioni con cui il backend è stato collaudato (Python 3.13)
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+python-multipart
+httpx==0.28.1
+numpy==2.5.4
+scipy==1.18.1
+pillow==13.0.0
+trimesh==5.2.0
+meshoptimizer==0.2.30a0
+scikit-image          # solo per il manichino di prova
+pytest==9.2.0
