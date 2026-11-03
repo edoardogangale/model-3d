@@ -118,3 +118,15 @@ def test_validator_detects_corrupted_weights(client, tmp_path):
     bad = tmp_path / "bad_w.glb"; bad.write_bytes(raw)
     r = val.validate_glb(bad, provenance={"reconstruction": True}, node_validator=False)
     assert not r["ready"] and any(x["id"] in ("no_unweighted", "weights_norm") and not x["ok"] for x in r["checks"])
+
+
+def test_token_auth(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODEL3D_DATA", str(tmp_path)); monkeypatch.setenv("MODEL3D_TOKEN", "segreto")
+    for m in [m for m in sys.modules if m.startswith("server.app")]: del sys.modules[m]
+    from fastapi.testclient import TestClient
+    from server.app.main import app
+    c = TestClient(app)
+    assert c.get("/api/jobs").status_code == 401
+    assert c.post("/api/login", json={"token": "sbagliato"}).status_code == 401
+    assert c.post("/api/login", json={"token": "segreto"}).status_code == 200
+    assert c.get("/api/jobs").status_code == 200
